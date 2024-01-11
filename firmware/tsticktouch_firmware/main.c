@@ -47,6 +47,7 @@
 #include "cybsp.h"
 #include "cycfg.h"
 #include "cycfg_capsense.h"
+#include "cycfg_peripherals.h"
 
 
 /*******************************************************************************
@@ -65,6 +66,9 @@
 #define MAIN_TOUCH_BOARD (0u)
 #define AUX_TOUCH_BOARD (1u)
 
+/* Define SPI Mode Macros*/
+#define AUX_TOUCH_BOARD_PRESENT (1u)
+
 
 /*******************************************************************************
 * Global Variables
@@ -78,7 +82,7 @@ cy_en_capsense_bist_status_t button0_cp_status, button1_cp_status;
 /* New touch variable (set to 1 if there is new touch data to send) **/
 uint16_t newData = 0;
 /* Touch data buffers*/
-// Use 16bit subaddress size
+// Use 8bit subaddress size
 typedef struct touchBuffer
 {    
     uint8_t u8_reserve;                                    // addr 0, reserved for further use,
@@ -100,63 +104,6 @@ cy_stc_scb_spi_context_t spiContext;
 */
 uint32_t BOARD_MODE = 0;
 uint32_t ENABLE_SPI = 0;
-/* Populate configuration structure */
-/* Master configuration */
-cy_stc_scb_spi_config_t spiMasterConfig =
-{
-    .spiMode                  = CY_SCB_SPI_MASTER,
-    .subMode                  = CY_SCB_SPI_MOTOROLA,
-    .sclkMode                 = CY_SCB_SPI_CPHA0_CPOL0,
-    .parity                   = CY_SCB_SPI_PARITY_NONE, /* Only applicable for PSoC 4100S Max */
-    .dropOnParityError        = false,                  /* Only applicable for PSoC 4100S Max */
-    .oversample               = 10UL,
-    .rxDataWidth              = 8UL,
-    .txDataWidth              = 8UL,
-    .enableMsbFirst           = false,
-    .enableInputFilter        = false,
-    .enableFreeRunSclk        = false,
-    .enableMisoLateSample     = true,
-    .enableTransferSeperation = false,
-    .ssPolarity               = CY_SCB_SPI_ACTIVE_LOW,
-    .ssSetupDelay             = CY_SCB_SPI_SS_SETUP_DELAY_0_75_CYCLES,                /* Only applicable for PSoC 4100S Max */
-    .ssHoldDelay              = CY_SCB_SPI_SS_HOLD_DELAY_0_75_CYCLES,                 /* Only applicable for PSoC 4100S Max */
-    .ssInterDataframeDelay    = CY_SCB_SPI_SS_INTERFRAME_DELAY_1_5_CYCLES,            /* Only applicable for PSoC 4100S Max */
-    .enableWakeFromSleep      = false,
-    .mosiIdleHigh             = false,                  /* Only applicable for PSoC 4100S Max */
-    .rxFifoTriggerLevel  = 0UL,
-    .rxFifoIntEnableMask = 0UL,
-    .txFifoTriggerLevel  = 0UL,
-    .txFifoIntEnableMask = 0UL,
-    .masterSlaveIntEnableMask = 0UL,
-};
-/* Slave configuration */
-cy_stc_scb_spi_config_t spiSlaveConfig =
-{
-    .spiMode                  = CY_SCB_SPI_SLAVE,
-    .subMode                  = CY_SCB_SPI_MOTOROLA,
-    .sclkMode                 = CY_SCB_SPI_CPHA0_CPOL0,
-    .parity                   = CY_SCB_SPI_PARITY_NONE, /* Only applicable for PSoC 4100S Max */
-    .dropOnParityError        = false,                  /* Only applicable for PSoC 4100S Max */
-    .oversample               = 0UL,
-    .rxDataWidth              = 8UL,
-    .txDataWidth              = 8UL,
-    .enableMsbFirst           = false,
-    .enableInputFilter        = false,
-    .enableFreeRunSclk        = false,
-    .enableMisoLateSample     = false,
-    .enableTransferSeperation = false,
-    .ssPolarity               = CY_SCB_SPI_ACTIVE_LOW,
-    .ssSetupDelay             = CY_SCB_SPI_SS_SETUP_DELAY_0_75_CYCLES,               /* Only applicable for PSoC 4100S Max */
-    .ssHoldDelay              = CY_SCB_SPI_SS_HOLD_DELAY_0_75_CYCLES,                /* Only applicable for PSoC 4100S Max */
-    .ssInterDataframeDelay    = CY_SCB_SPI_SS_INTERFRAME_DELAY_1_5_CYCLES,           /* Only applicable for PSoC 4100S Max */
-    .enableWakeFromSleep      = false,
-    .mosiIdleHigh             = false,                  /* Only applicable for PSoC 4100S Max */
-    .rxFifoTriggerLevel  = 0UL,
-    .rxFifoIntEnableMask = 0UL,
-    .txFifoTriggerLevel  = 0UL,
-    .txFifoIntEnableMask = 0UL,
-    .masterSlaveIntEnableMask = 0UL,
-};
 
 /*******************************************************************************
 * Function Prototypes
@@ -167,9 +114,11 @@ static void capsense_msc1_isr(void);
 static void saveTouchData(void);
 static void ezi2c_isr(void);
 static void spi_isr(void);
+static void spi_aux_isr(void);
 static void initialize_i2c(void);
 static void initialize_spi(void);
 static void getTouch(void);
+static void sendTouch(void);
 
 #if CY_CAPSENSE_BIST_EN
 static void measure_sensor_cp(void);
@@ -224,11 +173,7 @@ int main(void)
 
         // Aux touch buffer
         touch2Data.u16_signal[i]   = 0x0000u;
-    }    
-
-    // Read the board mode from pins
-    BOARD_MODE = Cy_GPIO_Read(CYBSP_BOARD_MODE_PORT,CYBSP_BOARD_MODE_NUM);
-    ENABLE_SPI = Cy_GPIO_Read(CYBSP_SPI_ENABLEPIN_PORT,CYBSP_SPI_ENABLEPIN_NUM);
+    }
 
     /* Initialize EZI2C */
     initialize_i2c();
@@ -261,29 +206,22 @@ int main(void)
             /* Start the next scan */
             Cy_CapSense_ScanAllSlots(&cy_capsense_context);
 
-            /* Receive/Send data via SPI (if you are not waiting for another transfer) */
-            if (ENABLE_SPI) {
+            /* Receive/Send data via SPI */
+            if ((touch1Data.u8_boardmode == MAIN_TOUCH_BOARD) && (touch1Data.u8_spimode == AUX_TOUCH_BOARD_PRESENT)){
                 getTouch();
             }
-            
+
+            /* Send data to host MCU */
+            sendTouch();
+
             // /* Toggles GPIO for refresh rate measurement. Probe at P3.4. */
-            if (BOARD_MODE == AUX_TOUCH_BOARD) {
-                Cy_GPIO_Inv(CYBSP_SENSE_SCAN_RATE_AUX_PORT, CYBSP_SENSE_SCAN_RATE_AUX_NUM);
+            Cy_GPIO_Inv(CYBSP_SENSE_SCAN_RATE_PORT, CYBSP_SENSE_SCAN_RATE_NUM);
 
-                // /* Invert signal if there is touch data */
-                if (newData) {
-                    Cy_GPIO_Inv(CYBSP_EVT_AUX_PORT, CYBSP_EVT_AUX_NUM);
-                    newData = 0;
-                }
-            } else {
-                Cy_GPIO_Inv(CYBSP_SENSE_SCAN_RATE_PORT, CYBSP_SENSE_SCAN_RATE_NUM);
-
-                // /* Sends interrupt if there is touch data */
-                if (newData) {
-                    Cy_GPIO_Inv(CYBSP_EVT_PORT, CYBSP_EVT_NUM);
-                    newData = 0;
-                }                
-            }
+            // /* Sends interrupt if there is touch data */
+            if (newData) {
+                Cy_GPIO_Inv(CYBSP_EVT_PORT, CYBSP_EVT_NUM);
+                newData = 0;
+            }                
         }
     }
 }
@@ -474,47 +412,42 @@ static void initialize_spi(void)
 {
     cy_en_scb_spi_status_t status = CY_SCB_SPI_SUCCESS;
 
-    if (ENABLE_SPI) {
-        /* Init SPI */
-        if (BOARD_MODE == AUX_TOUCH_BOARD) {
-            // Set proper GPIO drive modes for SPI slave
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_MISO_PORT, CYBSP_SPI_MISO_NUM, CY_GPIO_DM_STRONG_IN_OFF);
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_MOSI_PORT, CYBSP_SPI_MOSI_NUM, CY_GPIO_DM_HIGHZ);
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_CLK_PORT, CYBSP_SPI_CLK_NUM, CY_GPIO_DM_HIGHZ);
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_CS_PORT, CYBSP_SPI_CS_NUM,   CY_GPIO_DM_HIGHZ);
+    /* Init SPI */
+    // Initialise SPI Slave device
+    status = Cy_SCB_SPI_Init(CYBSP_SPI_HW, &CYBSP_SPI_config, &spiContext);
 
-            // Initialise SPI Slave device
-            status = Cy_SCB_SPI_Init(CYBSP_SPI_HW, &spiSlaveConfig, &spiContext);
-        } else {
-            // Set proper GPIO drive modes for SPI Master
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_MISO_PORT, CYBSP_SPI_MISO_NUM, CY_GPIO_DM_HIGHZ);
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_MOSI_PORT, CYBSP_SPI_MOSI_NUM, CY_GPIO_DM_STRONG);
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_CLK_PORT, CYBSP_SPI_CLK_NUM, CY_GPIO_DM_STRONG);
-            Cy_GPIO_SetDrivemode(CYBSP_SPI_CS_PORT, CYBSP_SPI_CS_NUM,   CY_GPIO_DM_STRONG);
+    // Initialise SPI Master device
+    status = Cy_SCB_SPI_Init(CYBSP_SPI_AUX_HW, &CYBSP_SPI_AUX_config, &spiContext);
 
-            // Initialise SPI Master device
-            status = Cy_SCB_SPI_Init(CYBSP_SPI_HW, &spiMasterConfig, &spiContext);
-        }
-
-        if(status != CY_SCB_SPI_SUCCESS)
-        {
-            CY_ASSERT(CY_ASSERT_FAILED);
-        }
-
-        /* Populate configuration structure */
-        const cy_stc_sysint_t spiIntrConfig =
-        {
-            .intrSrc      = CYBSP_SPI_IRQ,
-            .intrPriority = SPI_INTR_PRIORITY,
-        };
-
-        /* Enable Interrupts*/
-        Cy_SysInt_Init(&spiIntrConfig, &spi_isr);
-        NVIC_EnableIRQ(CYBSP_SPI_IRQ);
-
-        /* Enable SPI to operate */
-        Cy_SCB_SPI_Enable(CYBSP_SPI_HW);
+    if(status != CY_SCB_SPI_SUCCESS)
+    {
+        CY_ASSERT(CY_ASSERT_FAILED);
     }
+
+    /* Populate configuration structure */
+    const cy_stc_sysint_t spimasterIntrConfig =
+    {
+        .intrSrc      = CYBSP_SPI_IRQ,
+        .intrPriority = SPI_INTR_PRIORITY,
+    };
+
+    /* Populate configuration structure */
+    const cy_stc_sysint_t spislaceIntrConfig =
+    {
+        .intrSrc      = CYBSP_SPI_AUX_IRQ,
+        .intrPriority = SPI_INTR_PRIORITY,
+    };
+
+    /* Enable Interrupts*/
+    Cy_SysInt_Init(&spimasterIntrConfig, &spi_isr);
+    Cy_SysInt_Init(&spislaceIntrConfig, &spi_aux_isr);
+
+    NVIC_EnableIRQ(CYBSP_SPI_IRQ);
+    NVIC_EnableIRQ(CYBSP_SPI_AUX_IRQ);
+
+    /* Enable SPI to operate */
+    Cy_SCB_SPI_Enable(CYBSP_SPI_HW);
+    Cy_SCB_SPI_Enable(CYBSP_SPI_AUX_HW);
 }
 
 /*******************************************************************************
@@ -530,6 +463,18 @@ static void spi_isr(void)
 }
 
 /*******************************************************************************
+* Function Name: spi_aux_isr
+********************************************************************************
+* Summary:
+* Wrapper function for handling interrupts from SPI block.
+*
+*******************************************************************************/
+static void spi_aux_isr(void)
+{
+    Cy_SCB_SPI_Interrupt(CYBSP_SPI_AUX_HW, &spiContext);
+}
+
+/*******************************************************************************
 * Function Name: getTouch
 ********************************************************************************
 * Summary:
@@ -542,12 +487,32 @@ static void getTouch(void)
     struct touchBuffer txBuffer;
     struct touchBuffer rxBuffer;
 
-    /* Transfer touch data from auxillary board*/
-    if (BOARD_MODE == AUX_TOUCH_BOARD) {
-        txBuffer = touch1Data;
+    /* Save touch data to buffer */
+    /* Master: start a transfer. Slave: prepare for a transfer. */
+    Cy_SCB_SPI_Transfer(CYBSP_SPI_AUX_HW, (uint8_t *)&txBuffer, (uint8_t *)&rxBuffer, sizeof(txBuffer), &spiContext);
+
+    while (0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_AUX_HW, &spiContext)))
+    {
     }
 
+    touch2Data = rxBuffer;
+}
+
+/*******************************************************************************
+* Function Name: sendTouch
+********************************************************************************
+* Summary:
+* Function to gsend touch data over SPI to auxillary touch board
+*******************************************************************************/
+static void sendTouch(void)
+{
+    // Create empty buffers for SPI (we will use the same structure as the I2C buffers)
+    struct touchBuffer txBuffer;
+    struct touchBuffer rxBuffer;
+
     /* Save touch data to buffer */
+    txBuffer = touch1Data;
+
     /* Master: start a transfer. Slave: prepare for a transfer. */
     Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, (uint8_t *)&rxBuffer, sizeof(txBuffer), &spiContext);
 
@@ -555,9 +520,15 @@ static void getTouch(void)
     {
     }
 
-    /* Save received touch data from auxillary board */
-    if (BOARD_MODE == MAIN_TOUCH_BOARD) {
-        touch2Data = rxBuffer;
+    if (touch1Data.u8_spimode == AUX_TOUCH_BOARD_PRESENT) {
+        txBuffer = touch2Data;
+
+        /* Master: start a transfer. Slave: prepare for a transfer. */
+        Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, (uint8_t *)&rxBuffer, sizeof(txBuffer), &spiContext);
+
+        while (0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_HW, &spiContext)))
+        {
+        }
     }
 }
 
