@@ -44,10 +44,12 @@
  * Include header files
  ******************************************************************************/
 #include "cy_pdl.h"
+#include "cy_scb_spi.h"
 #include "cybsp.h"
 #include "cycfg.h"
 #include "cycfg_capsense.h"
 #include "cycfg_peripherals.h"
+#include <stdint.h>
 
 
 /*******************************************************************************
@@ -60,15 +62,15 @@
 
 /* EZI2C interrupt priority must be higher than CapSense interrupt. */
 #define EZI2C_INTR_PRIORITY              (2u)
-#define SPI_INTR_PRIORITY              (2u)
+#define SPI_INTR_PRIORITY                (2u)
+#define SPI_AUX_INTR_PRIORITY            (2u)
 
 /* Define Board Mode Macros*/
+#define TOUCHSIZE (60u)
 #define MAIN_TOUCH_BOARD (0u)
 #define AUX_TOUCH_BOARD (1u)
-
-/* Define SPI Mode Macros*/
-#define AUX_TOUCH_BOARD_PRESENT (1u)
-
+#define SPI_TIMEOUT (100)
+#define SPI_BUFFERSIZE (128u)
 
 /*******************************************************************************
 * Global Variables
@@ -86,10 +88,10 @@ uint16_t newData = 0;
 typedef struct touchBuffer
 {    
     uint8_t u8_reserve;                                    // addr 0, reserved for further use,
-    uint8_t u8_boardmode;                                    // addr 1, reserved for further use,
-    uint8_t u8_spimode;                                    // addr 2, reserved for further use,
-    uint8_t u8_touchmode;                                    // addr 3, reserved for further use,
-    uint16_t u16_signal[CY_CAPSENSE_TOTAL_WIDGET_COUNT];     // addr 4 - 124,
+    uint8_t u8_boardmode;                                  // addr 1, is it the main board or aux board,
+    uint8_t u8_numboards;                                  // addr 2, number of boards,
+    uint8_t u8_touchmode;                                  // addr 3, reserved for further use,
+    uint16_t u16_signal[TOUCHSIZE];                        // addr 4 - 124,
 }touchBuffer;	
 
 struct touchBuffer touch1Data; // Main board touch data
@@ -97,6 +99,12 @@ struct touchBuffer touch2Data; // Auxillary board touch data
 
 /* Allocate context for SPI operation */
 cy_stc_scb_spi_context_t spiContext;
+cy_stc_scb_spi_context_t spi_aux_Context;
+unsigned long transfer_status;
+uint32_t bytes_transferred;
+uint32_t spi_main_count;
+uint32_t spi_aux_count;
+uint16_t txBuffer[SPI_BUFFERSIZE];
 
 /* Define SPI Mode
     0 = Main board
@@ -160,19 +168,26 @@ int main(void)
 
     touch1Data.u8_reserve = 0x00u; 
     touch1Data.u8_boardmode = 0x00u;
-    touch1Data.u8_spimode = 0x00u;
+    touch1Data.u8_numboards = 0x01u;
     touch1Data.u8_touchmode = 0x00u;   
     touch2Data.u8_reserve = 0x00u;   
     touch2Data.u8_boardmode = 0x00u;
-    touch2Data.u8_spimode = 0x00u;
+    touch2Data.u8_numboards = 0x01u;
     touch2Data.u8_touchmode = 0x00u; 
-    for(i=0; i<CY_CAPSENSE_TOTAL_WIDGET_COUNT; i++)
+    for(i=0; i<TOUCHSIZE; i++)
     {   
         // Main touch buffer
         touch1Data.u16_signal[i]   = 0x0000u;
 
         // Aux touch buffer
         touch2Data.u16_signal[i]   = 0x0000u;
+    }
+
+    /* Initialise SPI buffer*/
+    for(i=0; i<SPI_BUFFERSIZE; i++)
+    {   
+        // Main touch buffer
+        txBuffer[i]   = 0x0000u;
     }
 
     /* Initialize EZI2C */
@@ -206,8 +221,8 @@ int main(void)
             /* Start the next scan */
             Cy_CapSense_ScanAllSlots(&cy_capsense_context);
 
-            /* Receive/Send data via SPI */
-            if ((touch1Data.u8_boardmode == MAIN_TOUCH_BOARD) && (touch1Data.u8_spimode == AUX_TOUCH_BOARD_PRESENT)){
+            /* If there are more than one touchboards get SPI data from them */
+            if (touch1Data.u8_numboards > 1){
                 getTouch();
             }
 
@@ -326,7 +341,7 @@ static void capsense_msc1_isr(void)
 *******************************************************************************/
 static void saveTouchData(void){
     uint16_t i;
-    for(i=0;i<CY_CAPSENSE_TOTAL_WIDGET_COUNT;i++)
+    for(i=0;i<TOUCHSIZE;i++)
     {
         if (i < 30) {
             if (touch1Data.u16_signal[59-i] != cy_capsense_tuner.sensorContext[i].diff) {
@@ -417,7 +432,7 @@ static void initialize_spi(void)
     status = Cy_SCB_SPI_Init(CYBSP_SPI_HW, &CYBSP_SPI_config, &spiContext);
 
     // Initialise SPI Master device
-    status = Cy_SCB_SPI_Init(CYBSP_SPI_AUX_HW, &CYBSP_SPI_AUX_config, &spiContext);
+    status = Cy_SCB_SPI_Init(CYBSP_SPI_AUX_HW, &CYBSP_SPI_AUX_config, &spi_aux_Context);
 
     if(status != CY_SCB_SPI_SUCCESS)
     {
@@ -425,22 +440,22 @@ static void initialize_spi(void)
     }
 
     /* Populate configuration structure */
-    const cy_stc_sysint_t spimasterIntrConfig =
+    const cy_stc_sysint_t spi_main_IntrConfig =
     {
         .intrSrc      = CYBSP_SPI_IRQ,
         .intrPriority = SPI_INTR_PRIORITY,
     };
 
     /* Populate configuration structure */
-    const cy_stc_sysint_t spislaceIntrConfig =
+    const cy_stc_sysint_t spi_aux_IntrConfig =
     {
         .intrSrc      = CYBSP_SPI_AUX_IRQ,
-        .intrPriority = SPI_INTR_PRIORITY,
+        .intrPriority = SPI_AUX_INTR_PRIORITY,
     };
 
     /* Enable Interrupts*/
-    Cy_SysInt_Init(&spimasterIntrConfig, &spi_isr);
-    Cy_SysInt_Init(&spislaceIntrConfig, &spi_aux_isr);
+    Cy_SysInt_Init(&spi_main_IntrConfig, &spi_isr);
+    Cy_SysInt_Init(&spi_aux_IntrConfig, &spi_aux_isr);
 
     NVIC_EnableIRQ(CYBSP_SPI_IRQ);
     NVIC_EnableIRQ(CYBSP_SPI_AUX_IRQ);
@@ -471,7 +486,7 @@ static void spi_isr(void)
 *******************************************************************************/
 static void spi_aux_isr(void)
 {
-    Cy_SCB_SPI_Interrupt(CYBSP_SPI_AUX_HW, &spiContext);
+    Cy_SCB_SPI_Interrupt(CYBSP_SPI_AUX_HW, &spi_aux_Context);
 }
 
 /*******************************************************************************
@@ -484,18 +499,32 @@ static void spi_aux_isr(void)
 static void getTouch(void)
 {
     // Create empty buffers for SPI (we will use the same structure as the I2C buffers)
-    struct touchBuffer txBuffer;
-    struct touchBuffer rxBuffer;
+    cy_en_scb_spi_status_t status;
+    uint16_t rxBuffer[SPI_BUFFERSIZE];
 
-    /* Save touch data to buffer */
-    /* Master: start a transfer. Slave: prepare for a transfer. */
-    Cy_SCB_SPI_Transfer(CYBSP_SPI_AUX_HW, (uint8_t *)&txBuffer, (uint8_t *)&rxBuffer, sizeof(txBuffer), &spiContext);
-
-    while (0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_AUX_HW, &spiContext)))
-    {
+    for(int i=0; i<TOUCHSIZE; i++)
+    {   
+        rxBuffer[i] = 0;
+        rxBuffer[i+60] = 0;
     }
 
-    touch2Data = rxBuffer;
+    /* Save touch data to buffer */
+    int i = 0;
+
+    /* Master: start a transfer. Slave: prepare for a transfer. */
+    status = Cy_SCB_SPI_Transfer(CYBSP_SPI_AUX_HW, NULL, (uint8_t *)&rxBuffer, sizeof(rxBuffer), &spi_aux_Context);
+
+    if (status == CY_SCB_SPI_SUCCESS) {
+        while (0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_AUX_HW, &spi_aux_Context)))
+        {
+        }
+
+        /* Save data to touch buffer*/
+        for(i=0; i<TOUCHSIZE; i++)
+        {   
+            touch2Data.u16_signal[i] = rxBuffer[i];
+        }
+    }
 }
 
 /*******************************************************************************
@@ -506,29 +535,23 @@ static void getTouch(void)
 *******************************************************************************/
 static void sendTouch(void)
 {
-    // Create empty buffers for SPI (we will use the same structure as the I2C buffers)
-    struct touchBuffer txBuffer;
-    struct touchBuffer rxBuffer;
+    /* Master: start a transfer. Slave: prepare for a transfer. */
+    // if (spi_main_count > SPI_TIMEOUT) {
+    //     Cy_SCB_SPI_AbortTransfer(CYBSP_SPI_HW, &spiContext);
+    //     spi_main_count = 0;
+    // }
 
     /* Save touch data to buffer */
-    txBuffer = touch1Data;
-
-    /* Master: start a transfer. Slave: prepare for a transfer. */
-    Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, (uint8_t *)&rxBuffer, sizeof(txBuffer), &spiContext);
-
-    while (0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_HW, &spiContext)))
-    {
+    for(int i=0; i<TOUCHSIZE; i++)
+    {   
+        txBuffer[i] = touch1Data.u16_signal[i];
+        txBuffer[i+60] = touch2Data.u16_signal[i];
     }
 
-    if (touch1Data.u8_spimode == AUX_TOUCH_BOARD_PRESENT) {
-        txBuffer = touch2Data;
-
-        /* Master: start a transfer. Slave: prepare for a transfer. */
-        Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, (uint8_t *)&rxBuffer, sizeof(txBuffer), &spiContext);
-
-        while (0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_HW, &spiContext)))
-        {
-        }
+    /* Master: start a transfer. Slave: prepare for a transfer. */
+    Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, NULL, sizeof(txBuffer), &spiContext);
+    while ((0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_HW, &spiContext)))) 
+    {
     }
 }
 
