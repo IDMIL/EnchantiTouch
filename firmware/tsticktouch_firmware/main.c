@@ -50,7 +50,10 @@
 #include "cycfg_capsense.h"
 #include "cycfg_peripherals.h"
 #include <stdint.h>
-
+#include <stdio.h>
+#include <time.h>
+#include <sys/time.h>
+#include <cy_systick.h>
 
 /*******************************************************************************
 * Macros
@@ -97,6 +100,16 @@ typedef struct touchBuffer
 struct touchBuffer touch1Data; // Main board touch data
 struct touchBuffer touch2Data; // Auxillary board touch data
 
+/* Timing variables */
+int start, end; // timing variable
+float slot_scan_time = 0;
+float sensor_scan_time = 0;
+uint16_t scan_time = 0;
+float total_t = 0;
+int systick_count = 0;
+float TRIALS = 20000.0f;
+int SENSORS_PER_TRIAL = 30.0f;
+
 /* Allocate context for SPI operation */
 cy_stc_scb_spi_context_t spiContext;
 cy_stc_scb_spi_context_t spi_aux_Context;
@@ -127,11 +140,14 @@ static void initialize_i2c(void);
 static void initialize_spi(void);
 static void getTouch(void);
 static void sendTouch(void);
+static float timedifference_msec(void);
+static float timedifference_usec(void);
+static void systick_isr(void);
+static uint32_t get_tick(void);
 
 #if CY_CAPSENSE_BIST_EN
 static void measure_sensor_cp(void);
 #endif /* CY_CAPSENSE_BIST_EN */
-
 
 /*******************************************************************************
 * Function Name: main
@@ -162,6 +178,10 @@ int main(void)
 
     /* Enable global interrupts */
     __enable_irq();
+
+    /* Enable timer */
+    Cy_SysTick_Init(CY_SYSTICK_CLOCK_SOURCE_CLK_CPU, 0x00FFFFFF);
+    Cy_SysTick_SetCallback(0UL, &systick_isr);
 
     /* touch buffer Initialization */
     uint16_t i;  
@@ -203,6 +223,8 @@ int main(void)
     /* Measure the self capacitance of sensor electrode using BIST */
     measure_sensor_cp();
 #endif /* CY_CAPSENSE_BIST_EN */
+    /* start time */
+    start = Cy_SysTick_GetValue();
 
     /* Start the first scan */
     Cy_CapSense_ScanAllSlots(&cy_capsense_context);
@@ -211,7 +233,6 @@ int main(void)
     {
         if(CY_CAPSENSE_NOT_BUSY == Cy_CapSense_IsBusy(&cy_capsense_context))
         {
-            /* */
             /* Process all widgets */
             Cy_CapSense_ProcessAllWidgets(&cy_capsense_context);
 
@@ -226,6 +247,12 @@ int main(void)
                 getTouch();
             }
 
+            /* Compute sensor scan time */
+            end = get_tick();
+            total_t = timedifference_usec();
+            scan_time = (uint16_t)total_t;
+            start = end;
+
             /* Send data to host MCU */
             sendTouch();
 
@@ -239,6 +266,74 @@ int main(void)
             }                
         }
     }
+    // /* update time */
+    // end = get_tick();
+    // total_t = timedifference_sec();
+    // slot_scan_time = 1000 * total_t / TRIALS; // scan time per 30 sensors (us)
+    // sensor_scan_time = slot_scan_time / SENSORS_PER_TRIAL; // scan time per sensor (us)
+    // printf("Time taken to scan %d sensors %f times: %f ms", SENSORS_PER_TRIAL, TRIALS, total_t);
+}
+
+
+/*******************************************************************************
+* Function Name: get tick
+********************************************************************************
+* Summary:
+*  Get current systick value
+*
+*******************************************************************************/
+
+static uint32_t get_tick(void)
+{
+    return ((0xFFFFFF - Cy_SysTick_GetValue()) + (systick_count * 0x1000000));
+}
+
+/*******************************************************************************
+* Function Name: timedifference_msec
+********************************************************************************
+* Summary:
+*  This function returns the time difference in ms
+*
+*******************************************************************************/
+
+static float timedifference_msec(void)
+{
+    int tick_dif = end - start;
+    if (tick_dif < 0) {
+        tick_dif = -1 * tick_dif;
+    }
+    float time_diff = tick_dif * 1000.0f;
+    time_diff = time_diff / 16777216.0f;
+    return time_diff;
+}
+
+/*******************************************************************************
+* Function Name: timedifference_msec
+********************************************************************************
+* Summary:
+*  This function returns the time difference in ms
+*
+*******************************************************************************/
+
+static float timedifference_usec(void)
+{
+    int tick_dif = end - start;
+    if (tick_dif < 0) {
+        tick_dif = -1 * tick_dif;
+    }
+    float time_diff = tick_dif * 1000000.0f;
+    time_diff = time_diff / 16777216.0f;
+    return time_diff;
+}
+
+
+/*******************************************************************************
+* Function Name: SysTick_Callback
+****************************************************************************/
+static void systick_isr(void)
+{
+    /* Some action */
+    systick_count++;
 }
 
 /*******************************************************************************
@@ -547,6 +642,9 @@ static void sendTouch(void)
         txBuffer[i] = touch1Data.u16_signal[i];
         txBuffer[i+60] = touch2Data.u16_signal[i];
     }
+
+    /* save scan time */
+    txBuffer[120] = scan_time;
 
     /* Master: start a transfer. Slave: prepare for a transfer. */
     Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, NULL, sizeof(txBuffer), &spiContext);
