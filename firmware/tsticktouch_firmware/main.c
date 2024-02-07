@@ -72,7 +72,7 @@
 #define TOUCHSIZE (60u)
 #define MAIN_TOUCH_BOARD (0u)
 #define AUX_TOUCH_BOARD (1u)
-#define SPI_TIMEOUT (100)
+#define SPI_TIMEOUT (1000)
 #define SPI_BUFFERSIZE (128u)
 
 /*******************************************************************************
@@ -100,6 +100,7 @@ typedef struct touchBuffer
 struct touchBuffer touch1Data; // Main board touch data
 struct touchBuffer touch2Data; // Auxillary board touch data
 
+
 /* Timing variables */
 int start, end; // timing variable
 float slot_scan_time = 0;
@@ -118,7 +119,7 @@ uint32_t bytes_transferred;
 uint32_t spi_main_count;
 uint32_t spi_aux_count;
 uint16_t txBuffer[SPI_BUFFERSIZE];
-
+uint16_t rxBuffer[SPI_BUFFERSIZE];
 /* Define SPI Mode
     0 = Main board
     1 = Aux Board
@@ -593,32 +594,24 @@ static void spi_aux_isr(void)
 *******************************************************************************/
 static void getTouch(void)
 {
-    // Create empty buffers for SPI (we will use the same structure as the I2C buffers)
-    cy_en_scb_spi_status_t status;
-    uint16_t rxBuffer[SPI_BUFFERSIZE];
-
-    for(int i=0; i<TOUCHSIZE; i++)
-    {   
-        rxBuffer[i] = 0;
-        rxBuffer[i+60] = 0;
-    }
-
-    /* Save touch data to buffer */
-    int i = 0;
-
-    /* Master: start a transfer. Slave: prepare for a transfer. */
-    status = Cy_SCB_SPI_Transfer(CYBSP_SPI_AUX_HW, NULL, (uint8_t *)&rxBuffer, sizeof(rxBuffer), &spi_aux_Context);
-
-    if (status == CY_SCB_SPI_SUCCESS) {
-        while (0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_AUX_HW, &spi_aux_Context)))
-        {
-        }
-
+    if (0UL == (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_AUX_HW, &spi_aux_Context))) {
+        /* Abort any ongoing transaction */
+        Cy_SCB_SPI_AbortTransfer(CYBSP_SPI_AUX_HW, &spi_aux_Context);
+        
         /* Save data to touch buffer*/
-        for(i=0; i<TOUCHSIZE; i++)
+        for(int i=0; i<TOUCHSIZE; i++)
         {   
             touch2Data.u16_signal[i] = rxBuffer[i];
         }
+
+        /* empty receive buffer */
+        for(int i=0; i<TOUCHSIZE; i++)
+        {   
+            rxBuffer[i] = 0;
+            rxBuffer[i+60] = 0;
+        }
+        /* Master: start a transfer. Slave: prepare for a transfer. */
+        Cy_SCB_SPI_Transfer(CYBSP_SPI_AUX_HW, NULL, (uint8_t *)&rxBuffer, sizeof(rxBuffer), &spi_aux_Context);
     }
 }
 
@@ -630,26 +623,22 @@ static void getTouch(void)
 *******************************************************************************/
 static void sendTouch(void)
 {
-    /* Master: start a transfer. Slave: prepare for a transfer. */
-    // if (spi_main_count > SPI_TIMEOUT) {
-    //     Cy_SCB_SPI_AbortTransfer(CYBSP_SPI_HW, &spiContext);
-    //     spi_main_count = 0;
-    // }
+    if ((0UL == (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_HW, &spiContext)))) {
+        /* Master: start a transfer. Slave: prepare for a transfer. */
+        Cy_SCB_SPI_AbortTransfer(CYBSP_SPI_HW, &spiContext); // abort any ongoing transaction
 
-    /* Save touch data to buffer */
-    for(int i=0; i<TOUCHSIZE; i++)
-    {   
-        txBuffer[i] = touch1Data.u16_signal[i];
-        txBuffer[i+60] = touch2Data.u16_signal[i];
-    }
+        /* Save touch data to buffer */
+        for(int i=0; i<TOUCHSIZE; i++)
+        {   
+            txBuffer[i] = touch1Data.u16_signal[i];
+            txBuffer[i+60] = touch2Data.u16_signal[i];
+        }
 
-    /* save scan time */
-    txBuffer[120] = scan_time;
+        /* save scan time */
+        txBuffer[127] = scan_time;
 
-    /* Master: start a transfer. Slave: prepare for a transfer. */
-    Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, NULL, sizeof(txBuffer), &spiContext);
-    while ((0UL != (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_HW, &spiContext)))) 
-    {
+        /* Master: start a transfer. Slave: prepare for a transfer. */
+        Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, NULL, sizeof(txBuffer), &spiContext);
     }
 }
 
