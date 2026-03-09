@@ -146,3 +146,5 @@ Thumbs.db:encryptable
 ehthumbs.db
 ehthumbs_vista.db
 [Dd]esktop.ini
+
+# IGnore all stuff in mtb_shared
