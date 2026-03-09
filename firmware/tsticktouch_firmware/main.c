@@ -43,14 +43,17 @@
 /*******************************************************************************
  * Include header files
  ******************************************************************************/
+#include "cy_canfd.h"
+#include "cy_gpio.h"
 #include "cy_pdl.h"
-#include "cy_scb_spi.h"
 #include "cybsp.h"
 #include "cycfg.h"
 #include "cycfg_capsense.h"
 #include "cycfg_peripherals.h"
+#include "cycfg_pins.h"
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 #include <sys/time.h>
 #include <cy_systick.h>
@@ -111,35 +114,28 @@ int systick_count = 0;
 float TRIALS = 20000.0f;
 int SENSORS_PER_TRIAL = 30.0f;
 
-/* Allocate context for SPI operation */
-cy_stc_scb_spi_context_t spiContext;
-cy_stc_scb_spi_context_t spi_aux_Context;
-unsigned long transfer_status;
-uint32_t bytes_transferred;
-uint32_t spi_main_count;
-uint32_t spi_aux_count;
-uint16_t txBuffer[SPI_BUFFERSIZE];
-uint16_t rxBuffer[SPI_BUFFERSIZE];
-/* Define SPI Mode
-    0 = Main board
-    1 = Aux Board
-*/
-uint32_t BOARD_MODE = 0;
-uint32_t ENABLE_SPI = 0;
+/* CANFD Variables */
+#define TOUCH_BUFFER_OFFSET 60 // 
+cy_stc_canfd_context_t canfd0_context;
+bool touch_data_received = false;
+uint32_t touch_buffer1[CY_CANFD_MESSAGE_DATA_BUFFER_SIZE];
+uint32_t touch_buffer2[CY_CANFD_MESSAGE_DATA_BUFFER_SIZE];
+uint32_t touch_buffer3[CY_CANFD_MESSAGE_DATA_BUFFER_SIZE];
+uint32_t touch_buffer4[CY_CANFD_MESSAGE_DATA_BUFFER_SIZE];
+uint32_t BOARD_POSITION = 0;
+uint32_t ENABLE_CANFD = 0;
 
 /*******************************************************************************
 * Function Prototypes
 *******************************************************************************/
+static uint32_t get_board_position(void);
 static void initialize_capsense(void);
 static void capsense_msc0_isr(void);
 static void capsense_msc1_isr(void);
 static void saveTouchData(void);
 static void ezi2c_isr(void);
-static void spi_isr(void);
-static void spi_aux_isr(void);
 static void initialize_i2c(void);
-static void initialize_spi(void);
-static void getTouch(void);
+static void initialise_canfd(void);
 static void sendTouch(void);
 static float timedifference_msec(void);
 static float timedifference_usec(void);
@@ -204,18 +200,24 @@ int main(void)
         touch2Data.u16_signal[i]   = 0x0000u;
     }
 
-    /* Initialise SPI buffer*/
-    for(i=0; i<SPI_BUFFERSIZE; i++)
+    /* Initialise CANFD buffers*/
+    for(i=0; i<CY_CANFD_MESSAGE_DATA_BUFFER_SIZE; i++)
     {   
         // Main touch buffer
-        txBuffer[i]   = 0x0000u;
+        touch_buffer1[i]   = 0x0000u;
+        touch_buffer2[i]   = 0x0000u;
+        touch_buffer3[i]   = 0x0000u;
+        touch_buffer4[i]   = 0x0000u;
     }
+
+    /* Find out board type */
+    BOARD_POSITION = get_board_position();
 
     /* Initialize EZI2C */
     initialize_i2c();
 
-    /* Initialize SPI*/
-    initialize_spi();
+    /* Initialize CANFD*/
+    initialise_canfd();
 
     /* Initialize MSC CapSense */
     initialize_capsense();
@@ -243,11 +245,6 @@ int main(void)
             /* Start the next scan */
             Cy_CapSense_ScanAllSlots(&cy_capsense_context);
 
-            /* If there are more than one touchboards get SPI data from them */
-            if (touch1Data.u8_numboards > 1){
-                getTouch();
-            }
-
             /* Compute sensor scan time */
             end = get_tick();
             total_t = timedifference_usec();
@@ -255,7 +252,10 @@ int main(void)
             start = end;
 
             /* Send data to host MCU */
-            sendTouch();
+            if (newData == 1) {
+                sendTouch();
+                newData = 0;
+            }
 
             // /* Toggles GPIO for refresh rate measurement. Probe at P3.4. */
             Cy_GPIO_Inv(CYBSP_SENSE_SCAN_RATE_PORT, CYBSP_SENSE_SCAN_RATE_NUM);
@@ -273,6 +273,40 @@ int main(void)
     // slot_scan_time = 1000 * total_t / TRIALS; // scan time per 30 sensors (us)
     // sensor_scan_time = slot_scan_time / SENSORS_PER_TRIAL; // scan time per sensor (us)
     // printf("Time taken to scan %d sensors %f times: %f ms", SENSORS_PER_TRIAL, TRIALS, total_t);
+}
+
+/*******************************************************************************
+* Function Name: get_board_position
+********************************************************************************
+* Summary:
+*  Returns the board position based on the values of pos1, pos2 pins
+*
+*******************************************************************************/
+static uint32_t get_board_position(void) {
+    uint32_t pos1Value = 0;
+    uint32_t pos2Value = 0;
+    uint32_t board_pos = 0;
+
+    /* Read board values */
+    pos1Value = Cy_GPIO_Read(POS_P1_PORT, POS_P1_NUM);
+    pos2Value = Cy_GPIO_Read(POS_P2_PORT, POS_P2_NUM);
+
+    // Get board type
+    if (!pos1Value && !pos2Value) {
+        board_pos = 1;
+    } else if (!pos1Value && pos2Value) {
+        board_pos = 2;
+    } else if (pos1Value && !pos2Value) {
+        board_pos = 3;
+    } else if (pos1Value && pos2Value) {
+        board_pos = 4;
+    } else {
+        // Default to board position 1
+        board_pos = 1;
+    }
+
+    // Return board position
+    return board_pos;
 }
 
 
@@ -511,136 +545,88 @@ static void ezi2c_isr(void)
     Cy_SCB_EZI2C_Interrupt(CYBSP_EZI2C_HW, &ezi2c_context);
 }
 
-
 /*******************************************************************************
-* Function Name: initialize_spi
+* Function Name: initialize_canfd
 ********************************************************************************
 * Summary:
-* Initialise the SPI comms in master/slave mode
+*  This function initializes the CANFD peripheral
 *
 *******************************************************************************/
-static void initialize_spi(void)
+
+static void initialise_canfd(void)
 {
-    cy_en_scb_spi_status_t status = CY_SCB_SPI_SUCCESS;
-
-    /* Init SPI */
-    // Initialise SPI Slave device
-    status = Cy_SCB_SPI_Init(CYBSP_SPI_HW, &CYBSP_SPI_config, &spiContext);
-
-    // Initialise SPI Master device
-    status = Cy_SCB_SPI_Init(CYBSP_SPI_AUX_HW, &CYBSP_SPI_AUX_config, &spi_aux_Context);
-
-    if(status != CY_SCB_SPI_SUCCESS)
+    if(CY_CANFD_SUCCESS != Cy_CANFD_Init (CANFD0, 0, &CANFD0_config, &canfd0_context))
     {
+        /* Error processing */
         CY_ASSERT(CY_ASSERT_FAILED);
     }
-
-    /* Populate configuration structure */
-    const cy_stc_sysint_t spi_main_IntrConfig =
-    {
-        .intrSrc      = CYBSP_SPI_IRQ,
-        .intrPriority = SPI_INTR_PRIORITY,
-    };
-
-    /* Populate configuration structure */
-    const cy_stc_sysint_t spi_aux_IntrConfig =
-    {
-        .intrSrc      = CYBSP_SPI_AUX_IRQ,
-        .intrPriority = SPI_AUX_INTR_PRIORITY,
-    };
-
-    /* Enable Interrupts*/
-    Cy_SysInt_Init(&spi_main_IntrConfig, &spi_isr);
-    Cy_SysInt_Init(&spi_aux_IntrConfig, &spi_aux_isr);
-
-    NVIC_EnableIRQ(CYBSP_SPI_IRQ);
-    NVIC_EnableIRQ(CYBSP_SPI_AUX_IRQ);
-
-    /* Enable SPI to operate */
-    Cy_SCB_SPI_Enable(CYBSP_SPI_HW);
-    Cy_SCB_SPI_Enable(CYBSP_SPI_AUX_HW);
-}
-
-/*******************************************************************************
-* Function Name: spi_isr
-********************************************************************************
-* Summary:
-* Wrapper function for handling interrupts from SPI block.
-*
-*******************************************************************************/
-static void spi_isr(void)
-{
-    Cy_SCB_SPI_Interrupt(CYBSP_SPI_HW, &spiContext);
-}
-
-/*******************************************************************************
-* Function Name: spi_aux_isr
-********************************************************************************
-* Summary:
-* Wrapper function for handling interrupts from SPI block.
-*
-*******************************************************************************/
-static void spi_aux_isr(void)
-{
-    Cy_SCB_SPI_Interrupt(CYBSP_SPI_AUX_HW, &spi_aux_Context);
-}
-
-/*******************************************************************************
-* Function Name: getTouch
-********************************************************************************
-* Summary:
-* Function to get touch data over SPI
-*
-*******************************************************************************/
-static void getTouch(void)
-{
-    if (0UL == (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_AUX_HW, &spi_aux_Context))) {
-        /* Abort any ongoing transaction */
-        Cy_SCB_SPI_AbortTransfer(CYBSP_SPI_AUX_HW, &spi_aux_Context);
-        
-        /* Save data to touch buffer*/
-        for(int i=0; i<TOUCHSIZE; i++)
-        {   
-            touch2Data.u16_signal[i] = rxBuffer[i];
-        }
-
-        /* empty receive buffer */
-        for(int i=0; i<TOUCHSIZE; i++)
-        {   
-            rxBuffer[i] = 0;
-            rxBuffer[i+60] = 0;
-        }
-        /* Master: start a transfer. Slave: prepare for a transfer. */
-        Cy_SCB_SPI_Transfer(CYBSP_SPI_AUX_HW, NULL, (uint8_t *)&rxBuffer, sizeof(rxBuffer), &spi_aux_Context);
-    }
+    // /* Enables the configuration changes to set Test mode */
+    // Cy_CANFD_ConfigChangesEnable(CANFD0, 0);
+    // /* Sets the Test mode configuration */
+    // Cy_CANFD_TestModeConfig(CANFD0, 0, CY_CANFD_TEST_MODE_DISABLE);
+    // /* Disables the configuration changes */
+    // Cy_CANFD_ConfigChangesDisable(CANFD0, 0);
 }
 
 /*******************************************************************************
 * Function Name: sendTouch
 ********************************************************************************
 * Summary:
-* Function to gsend touch data over SPI to auxillary touch board
+* Function to gsend touch data over CANFD bus
 *******************************************************************************/
 static void sendTouch(void)
 {
-    if ((0UL == (CY_SCB_SPI_TRANSFER_ACTIVE & Cy_SCB_SPI_GetTransferStatus(CYBSP_SPI_HW, &spiContext)))) {
-        /* Master: start a transfer. Slave: prepare for a transfer. */
-        Cy_SCB_SPI_AbortTransfer(CYBSP_SPI_HW, &spiContext); // abort any ongoing transaction
+    /* Add board position to the first index */
+    CANFD0_txBuffer_0.data_area_f[0] = BOARD_POSITION;
+    CANFD0_txBuffer_1.data_area_f[0] = BOARD_POSITION;
+    CANFD0_txBuffer_0.data_area_f[1] = 1; // Segment 1 of board (sensors 1 - 30)
+    CANFD0_txBuffer_1.data_area_f[1] = 2; // Segment 2 of board (sensors 31 - 60)
 
-        /* Save touch data to buffer */
-        for(int i=0; i<TOUCHSIZE; i++)
-        {   
-            txBuffer[i] = touch1Data.u16_signal[i];
-            txBuffer[i+60] = touch2Data.u16_signal[i];
+    /* Save touch data to buffer */
+    memcpy(CANFD0_txBuffer_0.data_area_f+2, touch1Data.u16_signal, sizeof(touch1Data.u16_signal)/2);
+    memcpy(CANFD0_txBuffer_1.data_area_f+2, touch1Data.u16_signal + 30, sizeof(touch1Data.u16_signal)/2);
+
+    /* Sends the prepared data using tx buffer 1 and waits for 1000ms */
+    Cy_CANFD_UpdateAndTransmitMsgBuffer(CANFD0, 0u, &CANFD0_txBuffer_0, 1u, &canfd0_context);
+    Cy_CANFD_UpdateAndTransmitMsgBuffer(CANFD0, 0u, &CANFD0_txBuffer_1, 2u, &canfd0_context);
+}
+
+/*******************************************************************************
+* Function Name: sendTouch
+********************************************************************************
+* Summary:
+* Function to gsend touch data over CANFD bus
+*******************************************************************************/
+
+/* CANFD reception callback */
+void CAN_RxMsgCallback(bool bRxFifoMsg, uint8_t u8MsgBufOrRxFifoNum,
+                       cy_stc_canfd_rx_buffer_t* pstcCanFDmsg)
+{
+    if(0 == pstcCanFDmsg->r0_f->rtr) /* Only for data frames */
+    {
+        // Make sure board position is correct
+        if (pstcCanFDmsg->data_area_f[0] != 1) {
+            if (pstcCanFDmsg->data_area_f[1] == 1) {
+                /* Copy receive data to transfer buffer */
+                CANFD0_txBuffer_2.data_area_f = pstcCanFDmsg->data_area_f;
+
+                /* Copy data to touch array */
+                memcpy(touch2Data.u16_signal, pstcCanFDmsg->data_area_f+2, sizeof(touch2Data.u16_signal)/2);
+            } else if (pstcCanFDmsg->data_area_f[1] == 2) {
+                /* Copy receive data to transfer buffer */
+                CANFD0_txBuffer_3.data_area_f = pstcCanFDmsg->data_area_f;
+
+                /* Copy data to touch array */
+                memcpy(touch2Data.u16_signal+30, pstcCanFDmsg->data_area_f+2, sizeof(touch2Data.u16_signal)/2);
+            }
         }
 
-        /* save scan time */
-        txBuffer[127] = scan_time;
-
-        /* Master: start a transfer. Slave: prepare for a transfer. */
-        Cy_SCB_SPI_Transfer(CYBSP_SPI_HW, (uint8_t *)&txBuffer, NULL, sizeof(txBuffer), &spiContext);
     }
+    /* These parameters are not used in this snippet */
+    (void)bRxFifoMsg;
+    (void)u8MsgBufOrRxFifoNum;
 }
+
 
 #if CY_CAPSENSE_BIST_EN
 /*******************************************************************************

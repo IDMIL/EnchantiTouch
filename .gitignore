@@ -396,3 +396,12 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# Ignore MAC .DS_STORE
+**/.DS_Store
+/firmware/mtb_shared/capsense/release-v4.0.0
+/firmware/mtb_shared/cmsis/release-v5.8.0
+/firmware/mtb_shared/core-lib/release-v1.4.1
+/firmware/mtb_shared/core-make/release-v3.2.2
+/firmware/mtb_shared/mtb-pdl-cat2/release-v2.7.0
+/firmware/mtb_shared/recipe-make-cat2/release-v2.1.1
