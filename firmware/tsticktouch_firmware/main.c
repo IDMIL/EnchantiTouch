@@ -96,8 +96,7 @@ typedef struct touchBuffer
 {    
     uint8_t u8_reserve;                                    // addr 0, reserved for further use,
     uint8_t u8_boardmode;                                  // addr 1, is it the main board or aux board,
-    uint8_t u8_numboards;                                  // addr 2, number of boards,
-    uint8_t u8_touchmode;                                  // addr 3, reserved for further use,
+    uint16_t u16_scan_time;                                // addr 2, Scan time of widgers
     uint16_t u16_signal[TOUCHSIZE];                        // addr 4 - 124,
 }touchBuffer;	
 
@@ -193,8 +192,7 @@ int main(void)
 
     touch1Data.u8_reserve = 0x00u; 
     touch1Data.u8_boardmode = 0x00u;
-    touch1Data.u8_numboards = 0x01u;
-    touch1Data.u8_touchmode = 0x00u;   
+    touch1Data.u16_scan_time = 0x00u; 
 
     /* Initialise CANFD buffers*/
     for(i=0; i<CY_CANFD_MESSAGE_DATA_BUFFER_SIZE; i++)
@@ -248,6 +246,7 @@ int main(void)
             start = end;
 
             /* Send data to host MCU */
+            newData = 1;
             if ((newData == 1) && (BOARD_POSITION != 1)) {
                 sendTouch();
             }
@@ -465,8 +464,7 @@ static void capsense_msc1_isr(void)
 *
 *******************************************************************************/
 static void saveTouchData(void){
-    uint16_t i;
-    for(i=0;i<BOARD_TOUCHSIZE;i++)
+    for(int i=0;i<BOARD_TOUCHSIZE;i++)
     {
         if (i < 30) {
             if (touch1Data.u16_signal[59-i] != cy_capsense_tuner.sensorContext[i].diff) {
@@ -479,7 +477,6 @@ static void saveTouchData(void){
             }
             touch1Data.u16_signal[i-30] = cy_capsense_tuner.sensorContext[i].diff;
         }
-        
     }
 }
 
@@ -640,12 +637,14 @@ void CAN_RxMsgCallback(bool bRxFifoMsg, uint8_t u8MsgBufOrRxFifoNum,
                 CANFD0_txBuffer_2.data_area_f = canfd_rx_buf->data_area_f;
 
                 /* Copy data to touch array */
+                touch1Data.u16_scan_time = conf.scan_time;
                 memcpy(&touch1Data.u16_signal[60], &canfd_rx_buf->data_area_f[1], 60);
             } else if (conf.segment == 2) {
                 /* Copy receive data to transfer buffer */
                 CANFD0_txBuffer_3.data_area_f = canfd_rx_buf->data_area_f;
 
                 /* Copy data to touch array */
+                touch1Data.u16_scan_time = conf.scan_time;
                 memcpy(&touch1Data.u16_signal[90], &canfd_rx_buf->data_area_f[1], 60);
             }
         }
