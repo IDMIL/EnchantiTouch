@@ -101,6 +101,12 @@ typedef struct touchBuffer
     uint16_t u16_signal[TOUCHSIZE];                        // addr 4 - 124,
 }touchBuffer;	
 
+typedef struct board_config
+{
+    uint8_t position;       // Board Position
+    uint8_t segment;        // Touch segment
+} board_config_t;
+
 struct touchBuffer touch1Data; // All touch data
 
 /* Timing variables */
@@ -582,14 +588,22 @@ static void canfd_isr(void)
 static void sendTouch(void)
 {
     /* Add board position to the first index */
-    CANFD0_txBuffer_0.data_area_f[0] = BOARD_POSITION;
-    CANFD0_txBuffer_1.data_area_f[0] = BOARD_POSITION;
-    CANFD0_txBuffer_0.data_area_f[1] = 1; // Segment 1 of board (sensors 1 - 30)
-    CANFD0_txBuffer_1.data_area_f[1] = 2; // Segment 2 of board (sensors 31 - 60)
+    board_config_t board_conf1 = {
+        .position = BOARD_POSITION,
+        .segment = 1
+    };
+    board_config_t board_conf2 = {
+        .position = BOARD_POSITION,
+        .segment = 2
+    };
+    
+    /* Copy board config to buffer */
+    memcpy(&CANFD0_txBuffer_0.data_area_f[0], &board_conf1, sizeof(board_conf1));
+    memcpy(&CANFD0_txBuffer_1.data_area_f[0], &board_conf2, sizeof(board_conf2));
 
     /* Save touch data to buffer */
-    memcpy(CANFD0_txBuffer_0.data_area_f+2, touch1Data.u16_signal, 60);
-    memcpy(CANFD0_txBuffer_1.data_area_f+2, touch1Data.u16_signal + 30, 60);
+    memcpy(&CANFD0_txBuffer_0.data_area_f[1], &touch1Data.u16_signal[0], 60);
+    memcpy(&CANFD0_txBuffer_1.data_area_f[1], &touch1Data.u16_signal[30], 60);
 
     /* Sends the prepared data using tx buffer 1 and waits for 1000ms */
     Cy_CANFD_UpdateAndTransmitMsgBuffer(CANFD0, 0u, &CANFD0_txBuffer_0, 0u, &canfd0_context);
@@ -611,22 +625,29 @@ void CAN_RxMsgCallback(bool bRxFifoMsg, uint8_t u8MsgBufOrRxFifoNum,
     /* Checking whether the frame received is a data frame */
     if(CY_CANFD_RTR_DATA_FRAME == canfd_rx_buf->r0_f->rtr) 
     {
+        // Get board config
+        board_config_t conf = {0};
+
+        // Copy board conf
+        memcpy(&conf, &canfd_rx_buf->data_area_f[0], sizeof(conf));
+
         // Make sure board position is correct
-        if (canfd_rx_buf->data_area_f[0] != 1) {
-            if (canfd_rx_buf->data_area_f[1] == 1) {
+        if (conf.position != 1) {
+            if (conf.segment == 1) {
                 /* Copy receive data to transfer buffer */
                 CANFD0_txBuffer_2.data_area_f = canfd_rx_buf->data_area_f;
 
                 /* Copy data to touch array */
-                memcpy(touch1Data.u16_signal+60, canfd_rx_buf->data_area_f+2, 60);
-            } else if (canfd_rx_buf->data_area_f[1] == 2) {
+                memcpy(&touch1Data.u16_signal[60], &canfd_rx_buf->data_area_f[1], 60);
+            } else if (conf.segment == 2) {
                 /* Copy receive data to transfer buffer */
                 CANFD0_txBuffer_3.data_area_f = canfd_rx_buf->data_area_f;
 
                 /* Copy data to touch array */
-                memcpy(touch1Data.u16_signal+90, canfd_rx_buf->data_area_f+2, 60);
+                memcpy(&touch1Data.u16_signal[90], &canfd_rx_buf->data_area_f[1], 60);
             }
         }
+
 
         // Acknowledge message
         if (bRxFifoMsg) {
