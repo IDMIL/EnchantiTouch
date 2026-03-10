@@ -20,8 +20,8 @@
                         </Aliases>
                     </Block>
                     <Parameters>
-                        <Param id="brs_0" value="false"/>
-                        <Param id="brs_1" value="false"/>
+                        <Param id="brs_0" value="true"/>
+                        <Param id="brs_1" value="true"/>
                         <Param id="brs_10" value="false"/>
                         <Param id="brs_11" value="false"/>
                         <Param id="brs_12" value="false"/>
@@ -32,7 +32,7 @@
                         <Param id="brs_17" value="false"/>
                         <Param id="brs_18" value="false"/>
                         <Param id="brs_19" value="false"/>
-                        <Param id="brs_2" value="false"/>
+                        <Param id="brs_2" value="true"/>
                         <Param id="brs_20" value="false"/>
                         <Param id="brs_21" value="false"/>
                         <Param id="brs_22" value="false"/>
@@ -43,7 +43,7 @@
                         <Param id="brs_27" value="false"/>
                         <Param id="brs_28" value="false"/>
                         <Param id="brs_29" value="false"/>
-                        <Param id="brs_3" value="false"/>
+                        <Param id="brs_3" value="true"/>
                         <Param id="brs_30" value="false"/>
                         <Param id="brs_31" value="false"/>
                         <Param id="brs_4" value="false"/>
@@ -568,8 +568,8 @@
                         <Param id="data_9_7" value="0"/>
                         <Param id="data_9_8" value="0"/>
                         <Param id="data_9_9" value="0"/>
-                        <Param id="dlc_0" value="0"/>
-                        <Param id="dlc_1" value="0"/>
+                        <Param id="dlc_0" value="15"/>
+                        <Param id="dlc_1" value="15"/>
                         <Param id="dlc_10" value="0"/>
                         <Param id="dlc_11" value="0"/>
                         <Param id="dlc_12" value="0"/>
@@ -580,7 +580,7 @@
                         <Param id="dlc_17" value="0"/>
                         <Param id="dlc_18" value="0"/>
                         <Param id="dlc_19" value="0"/>
-                        <Param id="dlc_2" value="0"/>
+                        <Param id="dlc_2" value="15"/>
                         <Param id="dlc_20" value="0"/>
                         <Param id="dlc_21" value="0"/>
                         <Param id="dlc_22" value="0"/>
@@ -591,7 +591,7 @@
                         <Param id="dlc_27" value="0"/>
                         <Param id="dlc_28" value="0"/>
                         <Param id="dlc_29" value="0"/>
-                        <Param id="dlc_3" value="0"/>
+                        <Param id="dlc_3" value="15"/>
                         <Param id="dlc_30" value="0"/>
                         <Param id="dlc_31" value="0"/>
                         <Param id="dlc_4" value="0"/>
@@ -1051,7 +1051,7 @@
                         <Param id="esi_9" value="CY_CANFD_ESI_ERROR_ACTIVE"/>
                         <Param id="extIDANDMask" value="536870911"/>
                         <Param id="fdf_0" value="CY_CANFD_FDF_CAN_FD_FRAME"/>
-                        <Param id="fdf_1" value="CY_CANFD_FDF_STANDARD_FRAME"/>
+                        <Param id="fdf_1" value="CY_CANFD_FDF_CAN_FD_FRAME"/>
                         <Param id="fdf_10" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_11" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_12" value="CY_CANFD_FDF_STANDARD_FRAME"/>
@@ -1062,7 +1062,7 @@
                         <Param id="fdf_17" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_18" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_19" value="CY_CANFD_FDF_STANDARD_FRAME"/>
-                        <Param id="fdf_2" value="CY_CANFD_FDF_STANDARD_FRAME"/>
+                        <Param id="fdf_2" value="CY_CANFD_FDF_CAN_FD_FRAME"/>
                         <Param id="fdf_20" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_21" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_22" value="CY_CANFD_FDF_STANDARD_FRAME"/>
@@ -1073,7 +1073,7 @@
                         <Param id="fdf_27" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_28" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_29" value="CY_CANFD_FDF_STANDARD_FRAME"/>
-                        <Param id="fdf_3" value="CY_CANFD_FDF_STANDARD_FRAME"/>
+                        <Param id="fdf_3" value="CY_CANFD_FDF_CAN_FD_FRAME"/>
                         <Param id="fdf_30" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_31" value="CY_CANFD_FDF_STANDARD_FRAME"/>
                         <Param id="fdf_4" value="CY_CANFD_FDF_STANDARD_FRAME"/>
@@ -1152,20 +1152,20 @@
                         <Param id="mode" value="true"/>
                         <Param id="modeFifo0" value="CY_CANFD_FIFO_MODE_BLOCKING"/>
                         <Param id="modeFifo1" value="CY_CANFD_FIFO_MODE_BLOCKING"/>
-                        <Param id="noOfRxBuffers" value="4"/>
+                        <Param id="noOfRxBuffers" value="16"/>
                         <Param id="noOfTxBuffers" value="4"/>
                         <Param id="nominalPrescaler" value="4"/>
                         <Param id="nominalSyncJumpWidth" value="4"/>
                         <Param id="nominalTimeSegment1" value="16"/>
                         <Param id="nominalTimeSegment2" value="7"/>
-                        <Param id="nonMatchingFramesExtended" value="CY_CANFD_ACCEPT_IN_RXFIFO_0"/>
-                        <Param id="nonMatchingFramesStandard" value="CY_CANFD_ACCEPT_IN_RXFIFO_0"/>
+                        <Param id="nonMatchingFramesExtended" value="CY_CANFD_REJECT_NON_MATCHING"/>
+                        <Param id="nonMatchingFramesStandard" value="CY_CANFD_REJECT_NON_MATCHING"/>
                         <Param id="numberOfEXTIDFilters" value="1"/>
                         <Param id="numberOfFifo0Elements" value="16"/>
                         <Param id="numberOfFifo1Elements" value="16"/>
                         <Param id="numberOfSIDFilters" value="1"/>
-                        <Param id="rejectRemoteFramesExtended" value="false"/>
-                        <Param id="rejectRemoteFramesStandard" value="false"/>
+                        <Param id="rejectRemoteFramesExtended" value="true"/>
+                        <Param id="rejectRemoteFramesStandard" value="true"/>
                         <Param id="rtr_0" value="CY_CANFD_RTR_DATA_FRAME"/>
                         <Param id="rtr_1" value="CY_CANFD_RTR_DATA_FRAME"/>
                         <Param id="rtr_10" value="CY_CANFD_RTR_DATA_FRAME"/>
@@ -1202,7 +1202,7 @@
                         <Param id="rxCallback" value="CAN_RxMsgCallback"/>
                         <Param id="rxFifo0DataValue" value="64"/>
                         <Param id="rxFifo1DataValue" value="64"/>
-                        <Param id="sfecSidFilter0" value="CY_CANFD_SFEC_STORE_RX_FIFO_0"/>
+                        <Param id="sfecSidFilter0" value="CY_CANFD_SFEC_STORE_RX_BUFFER"/>
                         <Param id="sfecSidFilter1" value="CY_CANFD_SFEC_STORE_RX_FIFO_0"/>
                         <Param id="sfecSidFilter10" value="CY_CANFD_SFEC_STORE_RX_FIFO_0"/>
                         <Param id="sfecSidFilter100" value="CY_CANFD_SFEC_STORE_RX_FIFO_0"/>
@@ -1714,7 +1714,7 @@
                         <Param id="sfid2_5_0_SidFilter97" value="0"/>
                         <Param id="sfid2_5_0_SidFilter98" value="0"/>
                         <Param id="sfid2_5_0_SidFilter99" value="0"/>
-                        <Param id="sfid2_SidFilter0" value="48"/>
+                        <Param id="sfid2_SidFilter0" value="0"/>
                         <Param id="sfid2_SidFilter1" value="0"/>
                         <Param id="sfid2_SidFilter10" value="0"/>
                         <Param id="sfid2_SidFilter100" value="0"/>
@@ -3550,11 +3550,11 @@
                 <Personality template="m0s8pin" version="2.0" instance="qo3NV4CV83w">
                     <Block location="ioss[0].port[11].pin[4]" locked="true">
                         <Aliases>
-                            <Alias value="CYBSP_BOARD_MODE"/>
+                            <Alias value="CTBSP_CAN_MODE"/>
                         </Aliases>
                     </Block>
                     <Parameters>
-                        <Param id="DriveModes" value="CY_GPIO_DM_HIGHZ"/>
+                        <Param id="DriveModes" value="CY_GPIO_DM_OD_DRIVESLOW_IN_OFF"/>
                         <Param id="inFlash" value="true"/>
                         <Param id="initialState" value="0"/>
                         <Param id="isrTrigger" value="CY_GPIO_INTR_DISABLE"/>
@@ -3822,7 +3822,7 @@
                         <Param id="calc" value="man"/>
                         <Param id="desFreq" value="48000000.000000"/>
                         <Param id="fracDivider" value="0"/>
-                        <Param id="intDivider" value="4"/>
+                        <Param id="intDivider" value="2"/>
                         <Param id="startOnReset" value="true"/>
                     </Parameters>
                 </Personality>
@@ -3847,11 +3847,11 @@
                         </Aliases>
                     </Block>
                     <Parameters>
-                        <Param id="DataRate" value="400"/>
+                        <Param id="DataRate" value="1000"/>
                         <Param id="EnableWakeup" value="true"/>
-                        <Param id="NumOfAddr" value="CY_SCB_EZI2C_TWO_ADDRESSES"/>
+                        <Param id="NumOfAddr" value="CY_SCB_EZI2C_ONE_ADDRESS"/>
                         <Param id="SlaveAddress1" value="30"/>
-                        <Param id="SlaveAddress2" value="31"/>
+                        <Param id="SlaveAddress2" value="30"/>
                         <Param id="SubAddrSize" value="CY_SCB_EZI2C_SUB_ADDR8_BITS"/>
                         <Param id="inFlash" value="true"/>
                     </Parameters>
@@ -3889,6 +3889,9 @@
                     <Block location="srss[0].power[0]" locked="true"/>
                     <Parameters>
                         <Param id="AmuxPumpEn" value="true"/>
+                        <Param id="HVBodEn" value="false"/>
+                        <Param id="VccOVDEn" value="false"/>
+                        <Param id="VddOVDEn" value="false"/>
                         <Param id="deepsleepLatency" value="0"/>
                         <Param id="idlePwrMode" value="CY_CFG_PWR_MODE_DEEPSLEEP"/>
                         <Param id="vddaMv" value="3300"/>

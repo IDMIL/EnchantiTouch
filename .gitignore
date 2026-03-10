@@ -400,3 +400,4 @@ FodyWeavers.xsd
 # Ignore MAC .DS_STORE
 **/.DS_Store
 /firmware/mtb_shared/**
+firmware/tsticktouch_firmware/.ninja_log

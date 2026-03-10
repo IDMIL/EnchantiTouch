@@ -68,11 +68,12 @@
 
 /* EZI2C interrupt priority must be higher than CapSense interrupt. */
 #define EZI2C_INTR_PRIORITY              (2u)
-#define SPI_INTR_PRIORITY                (2u)
+#define CANFD_INTR_PRIORITY              (3u)
 #define SPI_AUX_INTR_PRIORITY            (2u)
 
 /* Define Board Mode Macros*/
-#define TOUCHSIZE (60u)
+#define TOUCHSIZE (120u)
+#define BOARD_TOUCHSIZE (60u)
 #define MAIN_TOUCH_BOARD (0u)
 #define AUX_TOUCH_BOARD (1u)
 #define SPI_TIMEOUT (1000)
@@ -100,9 +101,7 @@ typedef struct touchBuffer
     uint16_t u16_signal[TOUCHSIZE];                        // addr 4 - 124,
 }touchBuffer;	
 
-struct touchBuffer touch1Data; // Main board touch data
-struct touchBuffer touch2Data; // Auxillary board touch data
-
+struct touchBuffer touch1Data; // All touch data
 
 /* Timing variables */
 int start, end; // timing variable
@@ -113,6 +112,7 @@ float total_t = 0;
 int systick_count = 0;
 float TRIALS = 20000.0f;
 int SENSORS_PER_TRIAL = 30.0f;
+int counter = 0;
 
 /* CANFD Variables */
 #define TOUCH_BUFFER_OFFSET 60 // 
@@ -136,6 +136,7 @@ static void saveTouchData(void);
 static void ezi2c_isr(void);
 static void initialize_i2c(void);
 static void initialise_canfd(void);
+static void canfd_isr();
 static void sendTouch(void);
 static float timedifference_msec(void);
 static float timedifference_usec(void);
@@ -187,18 +188,6 @@ int main(void)
     touch1Data.u8_boardmode = 0x00u;
     touch1Data.u8_numboards = 0x01u;
     touch1Data.u8_touchmode = 0x00u;   
-    touch2Data.u8_reserve = 0x00u;   
-    touch2Data.u8_boardmode = 0x00u;
-    touch2Data.u8_numboards = 0x01u;
-    touch2Data.u8_touchmode = 0x00u; 
-    for(i=0; i<TOUCHSIZE; i++)
-    {   
-        // Main touch buffer
-        touch1Data.u16_signal[i]   = 0x0000u;
-
-        // Aux touch buffer
-        touch2Data.u16_signal[i]   = 0x0000u;
-    }
 
     /* Initialise CANFD buffers*/
     for(i=0; i<CY_CANFD_MESSAGE_DATA_BUFFER_SIZE; i++)
@@ -252,7 +241,7 @@ int main(void)
             start = end;
 
             /* Send data to host MCU */
-            if (newData == 1) {
+            if ((newData == 1) && (BOARD_POSITION != 1)) {
                 sendTouch();
                 newData = 0;
             }
@@ -471,7 +460,7 @@ static void capsense_msc1_isr(void)
 *******************************************************************************/
 static void saveTouchData(void){
     uint16_t i;
-    for(i=0;i<TOUCHSIZE;i++)
+    for(i=0;i<BOARD_TOUCHSIZE;i++)
     {
         if (i < 30) {
             if (touch1Data.u16_signal[59-i] != cy_capsense_tuner.sensorContext[i].diff) {
@@ -526,9 +515,6 @@ static void initialize_i2c(void)
     Cy_SCB_EZI2C_SetBuffer1(CYBSP_EZI2C_HW, (uint8_t *)&touch1Data,
                             sizeof(touch1Data), sizeof(touch1Data),
                             &ezi2c_context);
-    Cy_SCB_EZI2C_SetBuffer2(CYBSP_EZI2C_HW, (uint8_t *)&touch2Data,
-                            sizeof(touch2Data), sizeof(touch2Data),
-                            &ezi2c_context);
 
     Cy_SCB_EZI2C_Enable(CYBSP_EZI2C_HW);
 }
@@ -560,12 +546,31 @@ static void initialise_canfd(void)
         /* Error processing */
         CY_ASSERT(CY_ASSERT_FAILED);
     }
-    // /* Enables the configuration changes to set Test mode */
-    // Cy_CANFD_ConfigChangesEnable(CANFD0, 0);
-    // /* Sets the Test mode configuration */
-    // Cy_CANFD_TestModeConfig(CANFD0, 0, CY_CANFD_TEST_MODE_DISABLE);
-    // /* Disables the configuration changes */
-    // Cy_CANFD_ConfigChangesDisable(CANFD0, 0);
+
+    /* Populate the configuration structure */
+    const cy_stc_sysint_t canfd_irq_cfg =
+    {
+        /* .intrSrc */ canfd_interrupts0_0_IRQn, /* CAN FD interrupt number */
+        /* .intrPriority */ CANFD_INTR_PRIORITY
+    };
+    /* Hook the interrupt service routine and enable the interrupt */
+    (void) Cy_SysInt_Init(&canfd_irq_cfg, &canfd_isr);
+    NVIC_EnableIRQ(canfd_interrupts0_0_IRQn);
+}
+
+
+/*******************************************************************************
+* Function Name: canfd_isr()
+********************************************************************************
+* Summary:
+* Wrapper function for enabling CANFD interrupts
+*
+*******************************************************************************/
+/* CANFD interrupt handler */
+static void canfd_isr(void)
+{
+    /* Just call the IRQ handler with the current channel number and context */
+    Cy_CANFD_IrqHandler(CANFD0, 0, &canfd0_context);
 }
 
 /*******************************************************************************
@@ -583,12 +588,12 @@ static void sendTouch(void)
     CANFD0_txBuffer_1.data_area_f[1] = 2; // Segment 2 of board (sensors 31 - 60)
 
     /* Save touch data to buffer */
-    memcpy(CANFD0_txBuffer_0.data_area_f+2, touch1Data.u16_signal, sizeof(touch1Data.u16_signal)/2);
-    memcpy(CANFD0_txBuffer_1.data_area_f+2, touch1Data.u16_signal + 30, sizeof(touch1Data.u16_signal)/2);
+    memcpy(CANFD0_txBuffer_0.data_area_f+2, touch1Data.u16_signal, 60);
+    memcpy(CANFD0_txBuffer_1.data_area_f+2, touch1Data.u16_signal + 30, 60);
 
     /* Sends the prepared data using tx buffer 1 and waits for 1000ms */
-    Cy_CANFD_UpdateAndTransmitMsgBuffer(CANFD0, 0u, &CANFD0_txBuffer_0, 1u, &canfd0_context);
-    Cy_CANFD_UpdateAndTransmitMsgBuffer(CANFD0, 0u, &CANFD0_txBuffer_1, 2u, &canfd0_context);
+    Cy_CANFD_UpdateAndTransmitMsgBuffer(CANFD0, 0u, &CANFD0_txBuffer_0, 0u, &canfd0_context);
+    Cy_CANFD_UpdateAndTransmitMsgBuffer(CANFD0, 0u, &CANFD0_txBuffer_1, 1u, &canfd0_context);
 }
 
 /*******************************************************************************
@@ -600,31 +605,36 @@ static void sendTouch(void)
 
 /* CANFD reception callback */
 void CAN_RxMsgCallback(bool bRxFifoMsg, uint8_t u8MsgBufOrRxFifoNum,
-                       cy_stc_canfd_rx_buffer_t* pstcCanFDmsg)
+                       cy_stc_canfd_rx_buffer_t* canfd_rx_buf)
 {
-    if(0 == pstcCanFDmsg->r0_f->rtr) /* Only for data frames */
+    /* Get data from receive buffer */
+    /* Checking whether the frame received is a data frame */
+    if(CY_CANFD_RTR_DATA_FRAME == canfd_rx_buf->r0_f->rtr) 
     {
         // Make sure board position is correct
-        if (pstcCanFDmsg->data_area_f[0] != 1) {
-            if (pstcCanFDmsg->data_area_f[1] == 1) {
+        if (canfd_rx_buf->data_area_f[0] != 1) {
+            if (canfd_rx_buf->data_area_f[1] == 1) {
                 /* Copy receive data to transfer buffer */
-                CANFD0_txBuffer_2.data_area_f = pstcCanFDmsg->data_area_f;
+                CANFD0_txBuffer_2.data_area_f = canfd_rx_buf->data_area_f;
 
                 /* Copy data to touch array */
-                memcpy(touch2Data.u16_signal, pstcCanFDmsg->data_area_f+2, sizeof(touch2Data.u16_signal)/2);
-            } else if (pstcCanFDmsg->data_area_f[1] == 2) {
+                memcpy(touch1Data.u16_signal+60, canfd_rx_buf->data_area_f+2, 60);
+            } else if (canfd_rx_buf->data_area_f[1] == 2) {
                 /* Copy receive data to transfer buffer */
-                CANFD0_txBuffer_3.data_area_f = pstcCanFDmsg->data_area_f;
+                CANFD0_txBuffer_3.data_area_f = canfd_rx_buf->data_area_f;
 
                 /* Copy data to touch array */
-                memcpy(touch2Data.u16_signal+30, pstcCanFDmsg->data_area_f+2, sizeof(touch2Data.u16_signal)/2);
+                memcpy(touch1Data.u16_signal+90, canfd_rx_buf->data_area_f+2, 60);
             }
         }
 
+        // Acknowledge message
+        if (bRxFifoMsg) {
+            Cy_CANFD_AckRxFifo(CANFD0, 0UL, u8MsgBufOrRxFifoNum);
+        } else {
+            Cy_CANFD_AckRxBuf(CANFD0, 0UL, u8MsgBufOrRxFifoNum);
+        }
     }
-    /* These parameters are not used in this snippet */
-    (void)bRxFifoMsg;
-    (void)u8MsgBufOrRxFifoNum;
 }
 
 
