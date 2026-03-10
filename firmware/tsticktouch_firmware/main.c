@@ -105,6 +105,7 @@ typedef struct board_config
 {
     uint8_t position;       // Board Position
     uint8_t segment;        // Touch segment
+    uint16_t scan_time;     // Scan time
 } board_config_t;
 
 struct touchBuffer touch1Data; // All touch data
@@ -589,11 +590,13 @@ static void sendTouch(void)
     /* Add board position to the first index */
     board_config_t board_conf1 = {
         .position = BOARD_POSITION,
-        .segment = 1
+        .segment = 1,
+        .scan_time = scan_time,
     };
     board_config_t board_conf2 = {
         .position = BOARD_POSITION,
-        .segment = 2
+        .segment = 2,
+        .scan_time = scan_time,
     };
     
     /* Copy board config to buffer */

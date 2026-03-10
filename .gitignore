@@ -402,3 +402,4 @@ FodyWeavers.xsd
 /firmware/mtb_shared/**
 firmware/tsticktouch_firmware/.ninja_log
 firmware/tsticktouch_firmware/.mtbqueryapi
+*.lock

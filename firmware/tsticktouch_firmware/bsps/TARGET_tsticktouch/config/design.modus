@@ -8,6 +8,7 @@
                         <Alias value="CYBSP_CSD"/>
                     </Aliases>
                 </Block>
+                <Block location="peri[0].div_16[4]"/>
                 <Block location="tcpwm[0].cnt[2]">
                     <Aliases>
                         <Alias value="INT_PWM"/>
@@ -52,10 +53,10 @@
                         <Param id="brs_7" value="false"/>
                         <Param id="brs_8" value="false"/>
                         <Param id="brs_9" value="false"/>
-                        <Param id="dataPrescaler" value="2"/>
-                        <Param id="dataSyncJumpWidth" value="4"/>
-                        <Param id="dataTimeSegment1" value="15"/>
-                        <Param id="dataTimeSegment2" value="8"/>
+                        <Param id="dataPrescaler" value="1"/>
+                        <Param id="dataSyncJumpWidth" value="2"/>
+                        <Param id="dataTimeSegment1" value="8"/>
+                        <Param id="dataTimeSegment2" value="3"/>
                         <Param id="data_0_0" value="0"/>
                         <Param id="data_0_1" value="0"/>
                         <Param id="data_0_10" value="0"/>
@@ -1154,10 +1155,10 @@
                         <Param id="modeFifo1" value="CY_CANFD_FIFO_MODE_BLOCKING"/>
                         <Param id="noOfRxBuffers" value="16"/>
                         <Param id="noOfTxBuffers" value="4"/>
-                        <Param id="nominalPrescaler" value="4"/>
+                        <Param id="nominalPrescaler" value="3"/>
                         <Param id="nominalSyncJumpWidth" value="4"/>
-                        <Param id="nominalTimeSegment1" value="16"/>
-                        <Param id="nominalTimeSegment2" value="7"/>
+                        <Param id="nominalTimeSegment1" value="11"/>
+                        <Param id="nominalTimeSegment2" value="4"/>
                         <Param id="nonMatchingFramesExtended" value="CY_CANFD_REJECT_NON_MATCHING"/>
                         <Param id="nonMatchingFramesStandard" value="CY_CANFD_REJECT_NON_MATCHING"/>
                         <Param id="numberOfEXTIDFilters" value="1"/>
@@ -3826,8 +3827,8 @@
                         <Param id="startOnReset" value="true"/>
                     </Parameters>
                 </Personality>
-                <Personality template="m0s8peripheralclock" version="1.0" instance="R6Tpxcs9Ibc">
-                    <Block location="peri[0].div_16[4]" locked="true">
+                <Personality template="m0s8peripheralclock" version="1.0" instance="bwsmgcCZmyw">
+                    <Block location="peri[0].div_16[2]" locked="true">
                         <Aliases>
                             <Alias value="CYBSP_CANFD_CLK_DIV"/>
                         </Aliases>
@@ -3902,7 +3903,7 @@
             <Netlist>
                 <Net>
                     <Port name="canfd[0].chan[0].clock_can[0]"/>
-                    <Port name="peri[0].div_16[4].clk[0]"/>
+                    <Port name="peri[0].div_16[2].clk[0]"/>
                 </Net>
                 <Net>
                     <Port name="canfd[0].chan[0].tr_fifo0[0]"/>
