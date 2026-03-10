@@ -249,7 +249,6 @@ int main(void)
             /* Send data to host MCU */
             if ((newData == 1) && (BOARD_POSITION != 1)) {
                 sendTouch();
-                newData = 0;
             }
 
             // /* Toggles GPIO for refresh rate measurement. Probe at P3.4. */
