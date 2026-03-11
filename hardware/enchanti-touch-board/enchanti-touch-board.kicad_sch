@@ -5641,6 +5641,34 @@
 		)
 		(uuid "1d16c1d6-81b7-43a8-a278-947334c226b3")
 	)
+	(text "Potentially Change to FFC Connector\nfor CANFD"
+		(exclude_from_sim no)
+		(at 293.624 192.786 0)
+		(effects
+			(font
+				(size 1.778 1.778)
+				(thickness 0.3556)
+				(bold yes)
+				(color 255 0 0 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "26e1466d-2fa0-4143-80db-38d4c96526dc")
+	)
+	(text "CHANGE TO\n2.54MM Pitch\nPin Holes"
+		(exclude_from_sim no)
+		(at 332.74 229.616 0)
+		(effects
+			(font
+				(size 1.778 1.778)
+				(thickness 0.3556)
+				(bold yes)
+				(color 255 0 0 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "2fdf83c4-39f1-4cf9-be3f-a3c62401c784")
+	)
 	(text "Capacitors\n"
 		(exclude_from_sim no)
 		(at 120.65 19.05 0)
@@ -5698,6 +5726,20 @@
 		)
 		(uuid "5c90363c-e1df-4632-914a-37d5dc44e765")
 	)
+	(text "Find nicer FFC Connector than the one used in the \nTrill Flex Board"
+		(exclude_from_sim no)
+		(at 307.34 30.226 0)
+		(effects
+			(font
+				(size 1.778 1.778)
+				(thickness 0.3556)
+				(bold yes)
+				(color 255 0 0 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "671c2ed4-492d-4739-b22a-f7daf137ff45")
+	)
 	(text "CAN TRANSCEIVER"
 		(exclude_from_sim no)
 		(at 202.184 200.914 0)
@@ -5743,6 +5785,20 @@
 			(justify left bottom)
 		)
 		(uuid "89cafce4-f1f9-4ff3-9bd6-0cd8f72ac54f")
+	)
+	(text "CHANGE DIP \nSWITCH"
+		(exclude_from_sim no)
+		(at 154.94 238.76 0)
+		(effects
+			(font
+				(size 1.778 1.778)
+				(thickness 0.3556)
+				(bold yes)
+				(color 255 0 0 1)
+			)
+			(justify left bottom)
+		)
+		(uuid "a5c665dc-573e-4f9d-8724-e41808f2e4fc")
 	)
 	(text "Touch Capacitors"
 		(exclude_from_sim no)
