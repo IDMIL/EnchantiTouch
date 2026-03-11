@@ -44,6 +44,8 @@
  * Include header files
  ******************************************************************************/
 #include "cy_canfd.h"
+#include "cy_capsense_centroid.h"
+#include "cy_capsense_lib.h"
 #include "cy_gpio.h"
 #include "cy_pdl.h"
 #include "cybsp.h"

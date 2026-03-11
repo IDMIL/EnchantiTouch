@@ -3894,7 +3894,7 @@
                         <Param id="VccOVDEn" value="false"/>
                         <Param id="VddOVDEn" value="false"/>
                         <Param id="deepsleepLatency" value="0"/>
-                        <Param id="idlePwrMode" value="CY_CFG_PWR_MODE_DEEPSLEEP"/>
+                        <Param id="idlePwrMode" value="CY_CFG_PWR_MODE_ACTIVE"/>
                         <Param id="vddaMv" value="3300"/>
                         <Param id="vdddMv" value="3300"/>
                     </Parameters>
